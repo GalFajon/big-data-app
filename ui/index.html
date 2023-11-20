@@ -1,0 +1,185 @@
+<html>
+    <head>
+        <script src="./bootstrap/js/bootstrap.min.js"></script>
+        <link rel="stylesheet" href="./bootstrap/css/bootstrap.min.css">
+
+        <script src="./grid/js/grid.js"></script>
+        <link rel="stylesheet" href="./grid/css/grid.css">
+
+        <script src="./chart/chart.js"></script>
+    </head>
+
+    <body style="background-color: #495D63;">
+        <div class="container" style="background-color: #F6F0ED;">
+            <h2 class="p-3">Accident death statistics app</h2>
+            <a class="p-3" href="/ui/help.html">How to use?</a>
+            <div>
+                <div class="row p-3" style="background-color:#F6F0ED;">
+                    <div class="col">
+                        <select class="form-select w-100" id="group">
+                        </select>
+                    </div>
+                    <div class="col">
+                        <select class="form-select w-100" id="category">
+                        </select>
+                    </div>
+                    <div class="col-2">
+                        <input class="w-100 btn btn-light" id="getData" type="button" value="Get data">
+                    </div>
+                    <div class="col-2">
+                        <input class="w-100 btn btn-light" id="plotData" type="button" value="Plot data">
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-3">
+                <div class="w-100" id="grid"></div>
+            </div>
+
+            <div class="modal fade" id="modal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h1 class="modal-title fs-5">Plot</h1>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <canvas id="plot"></canvas>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            let currentData = [];
+
+            // DOM
+            const selectCategories = document.getElementById('category');
+            const selectGroups = document.getElementById('group');
+            const getDataButton = document.getElementById('getData');
+            const plotDataButton = document.getElementById('plotData');
+            const grid = document.getElementById('grid');
+
+            const modal = new bootstrap.Modal(document.getElementById('modal'), {});
+            const plot = document.getElementById('plot');
+
+            let chart = new Chart(plot, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: "",
+                        data: [],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    responsive: true
+                }
+            });
+
+            // Grid.js
+            let jsGrid = new gridjs.Grid({
+                columns: [],
+                data: [],
+                pagination: {
+                    limit: 15
+                }
+            }).render(grid);
+
+            async function populateGroups() {
+                selectGroups.disabled = true;
+
+                let r = await fetch('/groups');
+                selectGroups.innerHTML = '';
+
+                if (r.ok) {
+                    let results = await r.json();
+                    for (o of results) selectGroups.innerHTML += `<option value="${o}">${o}</option>`;
+                }
+                else alert("Error fetching groups.");
+
+                selectGroups.disabled = false;
+            }
+
+            async function populateCategories() {
+                selectCategories.disabled = true;
+
+                let r = await fetch('/categories');
+                selectCategories.innerHTML = '<option value="">All</option>';
+
+                if (r.ok) {
+                    let results = await r.json();
+                    for (o of results) selectCategories.innerHTML += `<option value="${o[0]}">${o[1]}</option>`;
+                }
+                else alert("Error fetching groups.");
+
+                selectCategories.disabled = false;
+            }
+
+            plotDataButton.addEventListener('click', async () => {
+                if (currentData.length > 0) {
+                    chart.data.datasets[0].label = `Distribution of deaths by ${selectGroups.value} for category: ${selectCategories.options[selectCategories.selectedIndex].innerText}`;
+                    chart.data.labels = [];
+                    chart.data.datasets[0].data = [];
+
+                    chart.update();
+
+                    for (const el of currentData.map(el => el[0])) chart.data.labels.push(el);
+                    for (const el of currentData.map(el => el[1])) chart.data.datasets[0].data.push(el);
+
+                    chart.update();
+                    chart.resize();
+
+                    modal.show();
+                }
+                else alert("Error plotting data.");
+            });
+
+            getDataButton.addEventListener('click', async () => {
+                plotDataButton.disabled = true;
+
+                if (!selectCategories.disabled && !selectGroups.disabled) {
+                    let url = '/data';
+
+                    url += `?`;
+
+                    if (selectCategories.value != '') url += `category=${selectCategories.value}`;
+
+                    if (selectGroups.value != '') {
+                        if (selectCategories.value != '') url += '&';
+                        url += `group=${selectGroups.value}`;
+                    }
+
+                    let r = await fetch(url);
+
+                    if (r.ok) {
+                        currentData = await r.json();
+
+                        jsGrid.updateConfig({
+                            columns: [selectGroups.value, 'Number'],
+                            data: currentData
+                        }).forceRender(grid);
+
+                        plotDataButton.disabled = false;
+                    }
+                    else alert("Error fetching data.")
+                }
+            })
+
+            populateGroups();
+            populateCategories();
+
+            plotDataButton.disabled = true;
+        </script>
+    </body>
+</html>
